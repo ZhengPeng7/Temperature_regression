@@ -46,7 +46,9 @@ Now the result is sort of acceptable after **1** epoch over the whole dataset:
 
 ![inceptionV4_tail_K_AE](./images/inceptionV4_tail_K_AE.jpg)
 
+> With K at the beginning.
 
+![inceptionV4_head_K_MAE_0.446_labels_and_preds](./images/inceptionV4_head_K_MAE_0.446_labels_and_preds.jpg)
 
-
+![inceptionV4_head_K_MAE_0.446_AE](./images/inceptionV4_head_K_MAE_0.446_AE.jpg)
 
