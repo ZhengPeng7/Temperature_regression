@@ -11,18 +11,18 @@ import keras.backend as K
 # Data utils
 
 
-def read_image_and_K_from_dir(dir_path, idx_test=7):
+def read_image_and_K_from_dir(dir_path, idx_test=[17, 18, 20, 21]):
     train_paths = []
     test_paths = []
     train_K = []
     test_K = []
     train_labels = []
     test_labels = []
-    print('Reading \ttrain and test set \tfrom subject ', end='')
+    print('Reading \ttrain and validation set \tfrom subject ', end='')
     for file in sorted(os.listdir(dir_path), key=lambda x: int(x.replace('subject', '').split('.')[0])):
         print(file.replace('subject', '').split('.')[0], end=' ')
         data = pd.read_csv(os.path.join(dir_path, file), index_col=None)
-        if int(file.split('.')[0][7:]) != idx_test:
+        if int(file.split('.')[0][7:]) not in idx_test:
             train_paths += np.asarray(data['path'].dropna()).tolist()
             train_K += np.asarray(data['K'].dropna()).tolist()
             train_labels += np.asarray(data['temperature'].dropna()).tolist()
@@ -54,13 +54,12 @@ def generate_generator(img_paths, labels, K, batch_size=32, net='inceptionV4', r
             else:
                 flag_continue = 0
             img = cv2.cvtColor(cv2.imread(img_paths[idx_total]), cv2.COLOR_BGR2RGB)
+            ## 3 methods
             if with_K == 'head':
-                # print((img.shape[0], img.shape[1], 1))
-                # print('K:', K)
-                # print('idx_total:', idx_total)
-                # print(K[idx_total])
+                ## head_K: Expand the scalar K into a channel shaped like the image (150, 150, 1)
                 img = np.concatenate((img, np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)+K[idx_total]), axis=-1)
             elif with_K == 'no' or 'tail':
+                ## no_K: No special interpretation.
                 pass
             x.append(img)
             y.append(labels[idx_total])
@@ -74,7 +73,8 @@ def generate_generator(img_paths, labels, K, batch_size=32, net='inceptionV4', r
             if with_K == 'tail':
 #                 yield ({'img': x, 'K': k}, y)
                 for i in range(len(k)):
-                    k[i] = np.zeros((K_len,)) + k[i]
+                    ## tail_K: extend scalar K into an array that can be concatenated later before the final several Dense layers. 
+                    k[i] = np.zeros((K_len, 1)) + k[i]
                 k = np.asarray(k)
                 yield [x, k], y
             else:
@@ -90,7 +90,7 @@ def read_48_points_index(dir_points='./data/48_points'):
     return index
 
 
-def read_48_points(dir_path='./data/csv_files', dir_points='./data/48_points', idx_test=7):
+def read_48_points(dir_path='./data/csv_files', dir_points='./data/48_points', idx_test=[17, 18, 20, 21]):
     indices = read_48_points_index(dir_points)
     K = [97.1443351260611, 69.5664501664216, 159.927906153263, 197.541604656728, 196.532785605028, 150.187591154692,
          73.9067564389404, 98.1376187257627, 87.6987186119752, 87.1398284317404, 208.579199065803, 66.8972390272240,
@@ -102,12 +102,12 @@ def read_48_points(dir_path='./data/csv_files', dir_points='./data/48_points', i
     train_labels = []
     test_labels = []
     csv_files = sorted(os.listdir(dir_path), key=lambda x: int(x.split('.')[0].strip('subject')))
-    print('Reading \tvalidation set \t\tfrom subject ', end='')
+    print('Reading \ttest_48 set \t\t\tfrom subject ', end='')
     for idx_fil, file in enumerate(csv_files):
         idx_sensor = indices[idx_fil]
         data = pd.read_csv(os.path.join(dir_path, file), index_col=None)
         print(file.split('.')[0].strip('subject'), end=' ')
-        if int(file.split('.')[0][7:]) != idx_test:
+        if int(file.split('.')[0][7:]) not in idx_test:
             train_paths.append(np.asarray(data['path'].dropna()).reshape(-1, 1)[idx_sensor])
             train_K.append(np.asarray(data['K'].dropna()).reshape(-1, 1)[idx_sensor])
             train_labels.append(np.asarray(data['temperature'].dropna()).reshape(-1, 1)[idx_sensor])
@@ -150,22 +150,25 @@ class SaveModelOnAPE(keras.callbacks.Callback):
             self.model.save(os.path.join('weights', self.model.name + '_APE' + str(self.APE) + '.hdf5'))
 
 
-class SaveModelOnMAE_tail(keras.callbacks.Callback):
+class SaveModelOnMAE_no(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.MAE = round(logs.get('val_loss'), 3)
-        if self.MAE < (np.sqrt(5) - 1) / 2:
-            self.model.save(os.path.join('weights', 'weights_tail_K', self.model.name + '_tail_K_MAE' + str(self.MAE) + '.hdf5'))
+        if self.MAE < 0.4567890:
+            print('Saving to', os.path.join('weights', 'weights_no_K', self.model.name + '_no_K_MAE' + str(self.MAE) + '.hdf5'))
+            self.model.save(os.path.join('weights', 'weights_no_K', self.model.name + '_no_K_MAE' + str(self.MAE) + '.hdf5'))
 
 
 class SaveModelOnMAE_head(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.MAE = round(logs.get('val_loss'), 3)
-        if self.MAE < (np.sqrt(5) - 1) / 2:
+        if self.MAE < 0.4567890:
+            print('Saving to', os.path.join('weights', 'weights_head_K', self.model.name + '_head_K_MAE' + str(self.MAE) + '.hdf5'))
             self.model.save(os.path.join('weights', 'weights_head_K', self.model.name + '_head_K_MAE' + str(self.MAE) + '.hdf5'))
 
 
-class SaveModelOnMAE_no(keras.callbacks.Callback):
+class SaveModelOnMAE_tail(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.MAE = round(logs.get('val_loss'), 3)
-        if self.MAE < (np.sqrt(5) - 1) / 2:
-            self.model.save(os.path.join('weights', 'weights_no_K', self.model.name + '_no_K_MAE' + str(self.MAE) + '.hdf5'))
+        if self.MAE < 0.4567890:
+            print('Saving to', os.path.join('weights', 'weights_tail_K', self.model.name + '_tail_K_MAE' + str(self.MAE) + '.hdf5'))
+            self.model.save(os.path.join('weights', 'weights_tail_K', self.model.name + '_tail_K_MAE' + str(self.MAE) + '.hdf5'))
